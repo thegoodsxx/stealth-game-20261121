@@ -126,9 +126,9 @@ export class VisionSystem {
       }
 
       // Player is visible! Calculate detection rate
-      // 1. Proximity factor: significantly higher when close
-      const proxNorm = 1.0 - dist / range;
-      const proxFactor = 1.0 + proxNorm * DETECTION.closeDistanceFactor;
+      // 1. Proximity factor: quadratic curve so perimeter is survivable, close quarters perilous
+      const proxNorm = Math.max(0, 1.0 - dist / range);
+      const proxFactor = 1.0 + (proxNorm * proxNorm) * DETECTION.closeDistanceFactor;
 
       // 2. Sneak factor: sneaking drastically reduces signature
       const sneakFactor = player.isSneaking ? DETECTION.sneakMultiplier : 1.0;

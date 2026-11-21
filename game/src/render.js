@@ -59,10 +59,15 @@ export class Renderer {
       this.drawPlayer(ctx, player);
     }
 
-    // 12. Render Tactical HUD
+    // 12. Alert Vignette (atmospheric pulse when detection is critical or alarm active)
+    if (screen === SCREEN.PLAYING && (isAlert || detectionMeter > 0.42)) {
+      this.drawAlertVignette(ctx, detectionMeter, isAlert);
+    }
+
+    // 13. Render Tactical HUD
     this.drawHUD(ctx, gameState);
 
-    // 13. Render Overlays (Menu, Paused, Caught, Won)
+    // 14. Render Overlays (Menu, Paused, Caught, Won)
     if (screen === SCREEN.MENU) {
       this.drawMenuScreen(ctx);
     } else if (screen === SCREEN.PAUSED) {
@@ -392,33 +397,47 @@ export class Renderer {
       }
       ctx.closePath();
 
-      // Cone gradient fill
+      // Cone gradient fill with smooth volumetric lighting
+      const coneRange = cone.guard.isAlert ? 245 : 215;
       const grad = ctx.createRadialGradient(
         cone.guard.x,
         cone.guard.y,
-        10,
+        8,
         cone.guard.x,
         cone.guard.y,
-        cone.guard.isAlert ? 245 : 215
+        coneRange
       );
 
-      if (cone.guard.isAlert || isAlert) {
-        grad.addColorStop(0, PALETTE.coneAlertInner);
-        grad.addColorStop(0.7, 'rgba(239, 68, 68, 0.25)');
-        grad.addColorStop(1, PALETTE.coneAlertOuter);
+      const alertActive = cone.guard.isAlert || isAlert;
+
+      if (alertActive) {
+        grad.addColorStop(0, 'rgba(239, 68, 68, 0.65)');
+        grad.addColorStop(0.35, 'rgba(239, 68, 68, 0.35)');
+        grad.addColorStop(0.75, 'rgba(239, 68, 68, 0.14)');
+        grad.addColorStop(1, 'rgba(239, 68, 68, 0.01)');
       } else {
-        grad.addColorStop(0, PALETTE.coneNormalInner);
-        grad.addColorStop(0.7, 'rgba(245, 158, 11, 0.18)');
-        grad.addColorStop(1, PALETTE.coneNormalOuter);
+        grad.addColorStop(0, 'rgba(245, 158, 11, 0.50)');
+        grad.addColorStop(0.35, 'rgba(245, 158, 11, 0.24)');
+        grad.addColorStop(0.75, 'rgba(245, 158, 11, 0.09)');
+        grad.addColorStop(1, 'rgba(245, 158, 11, 0.01)');
       }
 
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Cone outer stroke
-      ctx.strokeStyle = (cone.guard.isAlert || isAlert) ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.3)';
-      ctx.lineWidth = 1;
+      // Crisp occluded boundary stroke
+      ctx.strokeStyle = alertActive ? 'rgba(239, 68, 68, 0.5)' : 'rgba(245, 158, 11, 0.35)';
+      ctx.lineWidth = 1.2;
       ctx.stroke();
+
+      // Flashlight emitter focal beam
+      const fov = alertActive ? 84 * (Math.PI / 180) : 72 * (Math.PI / 180);
+      ctx.beginPath();
+      ctx.moveTo(cone.guard.x, cone.guard.y);
+      ctx.arc(cone.guard.x, cone.guard.y, 32, cone.guard.angle - fov / 2, cone.guard.angle + fov / 2);
+      ctx.closePath();
+      ctx.fillStyle = alertActive ? 'rgba(254, 202, 202, 0.25)' : 'rgba(254, 243, 199, 0.20)';
+      ctx.fill();
 
       ctx.restore();
     }
@@ -602,6 +621,21 @@ export class Renderer {
       ctx.textAlign = 'left';
       ctx.fillText('⚠ ALARM ACTIVE', 1150, 29);
     }
+  }
+
+  drawAlertVignette(ctx, meter, isAlert) {
+    const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2;
+    const pulse = 0.65 + Math.sin(this.time * 7) * 0.35;
+    const intensity = isAlert ? 0.30 * pulse : Math.min(0.22, (meter - 0.42) * 0.45) * pulse;
+
+    const grad = ctx.createRadialGradient(cx, cy, 340, cx, cy, 700);
+    grad.addColorStop(0, 'rgba(239, 68, 68, 0)');
+    grad.addColorStop(0.65, `rgba(239, 68, 68, ${intensity * 0.45})`);
+    grad.addColorStop(1, `rgba(239, 68, 68, ${intensity})`);
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   }
 
   drawMenuScreen(ctx) {

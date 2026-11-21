@@ -79,6 +79,7 @@ export const PLAYER = {
   speedSneak: 85,
   footstepIntervalWalk: 0.38,
   footstepIntervalSneak: 0.65,
+  footprintLifetime: 0.85,
 };
 
 // Guard settings
@@ -93,18 +94,19 @@ export const GUARD = {
   coneRays: 120, // number of cast rays for smooth occlusion
   pauseLookSweepAngle: 35 * (Math.PI / 180),
   pauseLookSweepSpeed: 2.2,
+  alertLookSweepSpeed: 4.5,
 };
 
 // Detection model settings
 export const DETECTION = {
   max: 1.0,
-  baseFillRate: 0.52, // fills in ~1.9s at base distance
-  closeDistanceFactor: 1.6, // multiplier when player is very close to guard
-  sneakMultiplier: 0.34, // sneaking significantly reduces detection build-up
-  lampLightMultiplier: 1.75, // standing in lamp pool accelerates detection
+  baseFillRate: 0.50, // balanced base rate
+  closeDistanceFactor: 1.8, // quadratic proximity scaling for tight tension
+  sneakMultiplier: 0.32, // sneaking significantly reduces detection build-up
+  lampLightMultiplier: 1.80, // standing in lamp pool accelerates detection
   movingMultiplier: 1.25, // moving fast increases profile
-  stillMultiplier: 0.85, // standing still decreases profile
-  decayRate: 0.38, // recovery rate per second when hidden
+  stillMultiplier: 0.80, // standing still decreases profile
+  decayRate: 0.42, // fair recovery rate per second when hidden
   alertTriggerThreshold: 0.48, // near-miss alarm triggers at 48% meter
   alertCooldownTime: 4.2, // seconds guards remain in heightened alert
 };

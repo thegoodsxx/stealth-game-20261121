@@ -72,13 +72,18 @@ export class GuardManager {
         guard.pauseTimer -= dt;
         guard.lookSweepTime += dt;
 
-        // Sweep cone back and forth while paused to simulate scanning
-        const sweepSpeed = guard.isAlert ? GUARD.pauseLookSweepSpeed * 1.5 : GUARD.pauseLookSweepSpeed;
-        const sweepAngle = guard.isAlert ? GUARD.pauseLookSweepAngle * 1.3 : GUARD.pauseLookSweepAngle;
-        const sweepOffset = Math.sin(guard.lookSweepTime * sweepSpeed) * sweepAngle;
+        // Enhanced look-around sweep: rapid tactical scanning when alert
+        const sweepSpeed = guard.isAlert ? GUARD.alertLookSweepSpeed : GUARD.pauseLookSweepSpeed;
+        const sweepAngle = guard.isAlert ? GUARD.pauseLookSweepAngle * 1.4 : GUARD.pauseLookSweepAngle;
+
+        // When alert, use multi-harmonic sweep for snappy head-turns
+        const sweepOffset = guard.isAlert
+          ? Math.sin(guard.lookSweepTime * sweepSpeed) * sweepAngle * 0.7 +
+            Math.sin(guard.lookSweepTime * sweepSpeed * 2) * (sweepAngle * 0.3)
+          : Math.sin(guard.lookSweepTime * sweepSpeed) * sweepAngle;
 
         guard.targetAngle = (guard.baseAngle ?? 0) + sweepOffset;
-        this.rotateTowardTarget(guard, dt, 5.0);
+        this.rotateTowardTarget(guard, dt, guard.isAlert ? 8.5 : 5.0);
 
         if (guard.pauseTimer <= 0) {
           // Pause complete, proceed to next waypoint

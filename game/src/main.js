@@ -2,9 +2,9 @@
  * NIGHTWATCH: Silent Wing - Main Game Loop & State Machine
  */
 
-import { SCREEN, CANVAS_WIDTH, CANVAS_HEIGHT } from './config.js';
+import { SCREEN, CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER } from './config.js';
 import { input } from './input.js';
-import { createLevel, movePlayer, isPlayerInLampLight } from './world.js';
+import { createLevel, movePlayer } from './world.js';
 import { GuardManager } from './guards.js';
 import { VisionSystem } from './vision.js';
 import { sound } from './audio.js';
@@ -34,7 +34,6 @@ class Game {
   }
 
   setupEventListeners() {
-    // Canvas click to start or resume
     this.canvas.addEventListener('click', () => {
       sound.init();
       if (this.screen === SCREEN.MENU) {
@@ -67,46 +66,49 @@ class Game {
     const shot = params.get('shot');
     if (!shot) return;
 
-    // Immediately start playing for staging
     this.screen = SCREEN.PLAYING;
 
     if (shot === '1' || shot === 'cover') {
-      // Scene 1: Start view with guards and vision cones visible
+      // Scene 1: Start level view with patrolling guards and cones
       this.level.player.x = 90;
       this.level.player.y = 660;
       this.level.player.angle = -Math.PI / 2;
       this.detectionMeter = 0.08;
     } else if (shot === '2' || shot === 'patrol') {
-      // Scene 2: Player sneaking behind cover as guard sweeps past
+      // Scene 2: Player sneaking behind cover while a cone sweeps past
       this.level.player.x = 135;
-      this.level.player.y = 200;
+      this.level.player.y = 210;
       this.level.player.isSneaking = true;
       this.level.player.angle = Math.PI / 2;
       const g = this.guardManager.getGuards()[0];
       if (g) {
         g.x = 55;
         g.y = 210;
-        g.angle = 0; // pointing right towards shelf
+        g.angle = 0;
+        g.pauseTimer = 2.0;
+        g.baseAngle = 0;
       }
       this.detectionMeter = 0.22;
     } else if (shot === '3' || shot === 'near-miss') {
-      // Scene 3: Near-miss moment, high detection meter and alarm state
-      this.level.player.x = 560;
-      this.level.player.y = 130;
+      // Scene 3: Near-miss moment, high detection meter and alarm tint
+      this.level.player.x = 680;
+      this.level.player.y = 110;
       this.level.player.isSneaking = false;
       this.level.player.angle = 0;
       const g = this.guardManager.getGuards()[1];
       if (g) {
-        g.x = 500;
-        g.y = 130;
+        g.x = 530;
+        g.y = 110;
         g.angle = 0;
         g.isAlert = true;
+        g.alertTimer = 3.5;
       }
+      this.guardManager.triggerAlert(3.5);
       this.isAlert = true;
       this.wasEverAlerted = true;
-      this.detectionMeter = 0.78;
+      this.detectionMeter = 0.82;
     } else if (shot === '4' || shot === 'exit') {
-      // Scene 4: Player reached vault exit with intel folders collected
+      // Scene 4: Player reached vault exit with all intel folders
       this.level.player.x = 1205;
       this.level.player.y = 215;
       this.level.player.angle = 0;
@@ -119,7 +121,6 @@ class Game {
   }
 
   update(dt) {
-    // Handle global state transitions
     if (this.screen === SCREEN.MENU) {
       if (input.isJustPressed('Space') || input.isJustPressed('Enter')) {
         this.screen = SCREEN.PLAYING;
@@ -152,31 +153,56 @@ class Game {
       return;
     }
 
-    // Active Gameplay Updates
     this.missionTime += dt;
 
-    // 1. Player input and movement
+    // 1. Player movement and footstep timing
     const { dx, dy } = input.getMovementVector();
     this.level.player.isSneaking = input.isSneaking();
     movePlayer(this.level.player, dx, dy, dt, this.level);
 
-    // 2. Guard updates
-    this.guardManager.update(dt);
+    if (dx !== 0 || dy !== 0) {
+      this.level.player.footstepTimer += dt;
+      const stepInterval = this.level.player.isSneaking
+        ? PLAYER.footstepIntervalSneak
+        : PLAYER.footstepIntervalWalk;
+      if (this.level.player.footstepTimer >= stepInterval) {
+        this.level.player.footstepTimer = 0;
+        sound.playFootstep(this.level.player.isSneaking);
+      }
+    }
 
-    // 3. Vision and detection calculations
+    // 2. Guard patrol AI and footstep sounds
+    this.guardManager.update(dt, (guard) => {
+      const dist = Math.hypot(this.level.player.x - guard.x, this.level.player.y - guard.y);
+      sound.playGuardFootstep(dist);
+    });
+
+    // 3. Vision raycasting & detection evaluation
     const visionResult = this.visionSystem.update(
       dt,
       this.level.player,
       this.guardManager.getGuards(),
-      this.level
+      this.level,
+      (alertDuration) => {
+        this.guardManager.triggerAlert(alertDuration);
+        sound.playAlarmBlip();
+      }
     );
+
     this.detectionMeter = visionResult.detectionMeter;
     this.isAlert = visionResult.isAlert;
     if (this.isAlert) {
       this.wasEverAlerted = true;
     }
 
-    // Calculate vision cones for rendering
+    sound.updateDetectionSting(this.detectionMeter);
+
+    if (visionResult.isCaught) {
+      this.screen = SCREEN.CAUGHT;
+      sound.playCaught();
+    }
+
+    // Calculate full occluded vision cones for rendering
     this.visionCones = this.guardManager.getGuards().map((g) =>
       this.visionSystem.calculateGuardCone(g, this.level.segments)
     );
@@ -193,7 +219,7 @@ class Game {
       }
     }
 
-    // 5. Check Vault Exit Reach
+    // 5. Vault Exit Trigger
     const tr = this.level.vaultExit.trigger;
     const px = this.level.player.x;
     const py = this.level.player.y;
@@ -209,7 +235,6 @@ class Game {
 
     this.update(dt);
 
-    // Render frame
     const gameState = {
       screen: this.screen,
       level: this.level,
